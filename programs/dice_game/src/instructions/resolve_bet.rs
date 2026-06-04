@@ -47,7 +47,8 @@ struct Ed25519InstructionData<'a> {
     message: &'a [u8],
 }
 
-fn read_ed25519_instruction_data<'a>(data: &'a [u8], offset: u16, size: usize) -> Result<&'a [u8]> {
+// fn read_ed25519_instruction_data<'a>(data: &'a [u8], offset: u16, size: usize) -> Result<&'a [u8]> {
+fn read_ed25519_instruction_data(data: &[u8], offset: u16, size: usize) -> Result<&[u8]> {
     let start = usize::from(offset);
     let end = start.checked_add(size).ok_or(DiceError::MathError)?;
 

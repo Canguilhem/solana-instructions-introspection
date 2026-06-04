@@ -4,7 +4,9 @@ use anchor_spl::{
     token::{mint_to, transfer, Mint, MintTo, Token, TokenAccount, Transfer},
 };
 
-use crate::{error::AmmError, Config, DepositQuote, OperationSide, PoolState, CONFIG_SEED, LP_SEED};
+use crate::{
+    error::AmmError, Config, DepositQuote, OperationSide, PoolState, CONFIG_SEED, LP_SEED,
+};
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {

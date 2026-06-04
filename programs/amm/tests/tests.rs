@@ -12,7 +12,8 @@ mod utils;
 use utils::create_initialize_ix;
 
 use crate::utils::{
-    create_burn_ix, create_deposit_ix, create_swap_ix, create_withdraw_ix, get_user_atas, token_balance, update_config_ix
+    create_burn_ix, create_deposit_ix, create_swap_ix, create_withdraw_ix, get_user_atas,
+    token_balance, update_config_ix,
 };
 
 const SEED: u64 = 123;
@@ -100,7 +101,14 @@ fn setup() -> (
     )
 }
 
-fn fund_user(svm: &mut LiteSVM, payer: &Keypair, mint_x: Pubkey, mint_y: Pubkey, user_x: Pubkey, user_y: Pubkey) {
+fn fund_user(
+    svm: &mut LiteSVM,
+    payer: &Keypair,
+    mint_x: Pubkey,
+    mint_y: Pubkey,
+    user_x: Pubkey,
+    user_y: Pubkey,
+) {
     MintTo::new(svm, payer, &mint_x, &user_x, 1_000_000_000)
         .send()
         .unwrap();
@@ -237,8 +245,13 @@ fn test_withdraw() {
     );
 
     assert_tx_err(
-        send(&mut pool.svm, &[withdraw.clone()], &pool.payer, &[&pool.payer]),
-        "MissingPriorInstruction",  // Anchor Error Code name in logs
+        send(
+            &mut pool.svm,
+            &[withdraw.clone()],
+            &pool.payer,
+            &[&pool.payer],
+        ),
+        "MissingPriorInstruction", // Anchor Error Code name in logs
     );
 
     let burn_ix = create_burn_ix(
@@ -252,7 +265,13 @@ fn test_withdraw() {
         withdraw_amount,
     );
 
-    send(&mut pool.svm, &[burn_ix, withdraw], &pool.payer, &[&pool.payer]).expect("Burn + withdraw -> OK");
+    send(
+        &mut pool.svm,
+        &[burn_ix, withdraw],
+        &pool.payer,
+        &[&pool.payer],
+    )
+    .expect("Burn + withdraw -> OK");
 
     assert_eq!(
         token_balance(&pool.svm, &pool.user_lp),
@@ -459,9 +478,7 @@ fn test_swap_slippage_exceeded() {
 fn test_unauthorized_update_config() {
     let mut pool = setup_initialized_pool();
     let stranger = Keypair::new();
-    pool.svm
-        .airdrop(&stranger.pubkey(), 1_000_000_000)
-        .unwrap();
+    pool.svm.airdrop(&stranger.pubkey(), 1_000_000_000).unwrap();
 
     let update = update_config_ix(
         &stranger,
@@ -580,12 +597,7 @@ fn test_imbalanced_balanced_deposit_keeps_excess_in_wallet() {
     let user_lp_before = token_balance(&pool.svm, &pool.user_lp);
 
     let quote = cpmm_pool(&pool)
-        .deposit(
-            Some(offered_x),
-            Some(offered_y),
-            amm::Side::Balanced,
-            0,
-        )
+        .deposit(Some(offered_x), Some(offered_y), amm::Side::Balanced, 0)
         .expect("cpmm quote");
 
     let deposit = create_deposit_ix(
@@ -800,7 +812,13 @@ fn test_single_sided_withdraw_x_preserves_user_funds() {
         lp_amount,
     );
 
-    send(&mut pool.svm, &[burn_ix, withdraw], &pool.payer, &[&pool.payer]).expect("Burn + withdraw -> OK");
+    send(
+        &mut pool.svm,
+        &[burn_ix, withdraw],
+        &pool.payer,
+        &[&pool.payer],
+    )
+    .expect("Burn + withdraw -> OK");
 
     assert_eq!(
         token_balance(&pool.svm, &pool.user_x),
@@ -870,8 +888,13 @@ fn test_single_sided_withdraw_y_preserves_user_funds() {
         lp_amount,
     );
 
-
-    send(&mut pool.svm, &[burn_ix,withdraw], &pool.payer, &[&pool.payer]).expect("single-sided Y withdraw");
+    send(
+        &mut pool.svm,
+        &[burn_ix, withdraw],
+        &pool.payer,
+        &[&pool.payer],
+    )
+    .expect("single-sided Y withdraw");
 
     assert_eq!(
         token_balance(&pool.svm, &pool.user_x),

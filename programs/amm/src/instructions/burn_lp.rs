@@ -26,7 +26,7 @@ pub struct BurnLp<'info> {
         bump= config.lp_bump
     )]
     pub mint_lp: Account<'info, Mint>,
-    
+
     #[account(
         init_if_needed,
         payer=user,

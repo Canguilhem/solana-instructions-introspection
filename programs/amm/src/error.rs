@@ -35,8 +35,7 @@ pub enum AmmError {
     #[msg("Invalid data length")]
     InvalidDataLength,
     #[msg("Missing Prior instructions")]
-    MissingPriorInstruction
-    
+    MissingPriorInstruction,
 }
 
 impl From<CpmmError> for AmmError {

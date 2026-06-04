@@ -3,7 +3,7 @@ use anchor_lang::{
     system_program::{transfer, Transfer},
 };
 
-use crate::{Bet, DiceError, MAX_ROLL, MIN_BET_LAMPORTS, MIN_ROLL};
+use crate::{Bet, DiceError};
 
 #[derive(Accounts)]
 pub struct RefundBet<'info> {

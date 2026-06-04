@@ -199,10 +199,7 @@ pub fn create_burn_ix(
             associated_token_program: ASSOCIATED_PROGRAM_ID,
         }
         .to_account_metas(None),
-        data: amm::instruction::BurnLpTokens {
-            amount: lp_amount,
-        }
-        .data(),
+        data: amm::instruction::BurnLpTokens { amount: lp_amount }.data(),
     }
 }
 

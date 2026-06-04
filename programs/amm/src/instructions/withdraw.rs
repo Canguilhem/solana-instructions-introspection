@@ -1,11 +1,13 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{burn, transfer, Burn, Mint, Token, TokenAccount, Transfer},
+    token::{transfer, Mint, Token, TokenAccount, Transfer},
 };
 use solana_instructions_sysvar::get_instruction_relative;
 
-use crate::{error::AmmError, Config, OperationSide, PoolState, WithdrawQuote, CONFIG_SEED, LP_SEED};
+use crate::{
+    error::AmmError, Config, OperationSide, PoolState, WithdrawQuote, CONFIG_SEED, LP_SEED,
+};
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
@@ -86,7 +88,10 @@ impl<'info> Withdraw<'info> {
             self.vault_y.amount,
             // now that burn and lp are two different instructions
             //  we need to use lp_supply_before_burn
-            self.mint_lp.supply.checked_add(lp_amount).ok_or(AmmError::Overflow)?,
+            self.mint_lp
+                .supply
+                .checked_add(lp_amount)
+                .ok_or(AmmError::Overflow)?,
             self.config.fee,
         );
 
@@ -181,19 +186,19 @@ impl<'info> Withdraw<'info> {
     }
 
     pub fn confirm_burn(&self, amount: u64) -> Result<()> {
-        
-        let ix = get_instruction_relative(-1, &self.instruction_sysvar.to_account_info()).map_err(|_| error!(AmmError::MissingPriorInstruction))?;
+        let ix = get_instruction_relative(-1, &self.instruction_sysvar.to_account_info())
+            .map_err(|_| error!(AmmError::MissingPriorInstruction))?;
         // // confirm ix originate from our program
         require_eq!(ix.program_id, crate::ID, AmmError::InvalidProgramId);
-        
-        // confirm ix refs accounts 
+
+        // confirm ix refs accounts
         self.confrim_burn_accounts(ix.accounts)?;
-        
+
         // confirm data is 16 bytes long including discriminator (8)
         // u64 is 8 bytes
         require_eq!(ix.data.len(), 16, AmmError::InvalidDataLength);
 
-        // What would be the discriminator here 
+        // What would be the discriminator here
         // require_eq!(ix.data[0], 0, AmmError::InvalidDiscriminator);
 
         // read burn_amount used
@@ -204,22 +209,13 @@ impl<'info> Withdraw<'info> {
         );
         require_eq!(burn_amount, amount, AmmError::InvalidAmount);
 
-        
-
         Ok(())
     }
 
-    pub fn confrim_burn_accounts(
-        &self, accounts:Vec<AccountMeta>
-    )-> Result<()>{
-
+    pub fn confrim_burn_accounts(&self, accounts: Vec<AccountMeta>) -> Result<()> {
         const EXPECTED_COUNT: usize = 9;
 
-        require_eq!(
-            accounts.len(),
-            EXPECTED_COUNT,
-            AmmError::WrongAccountsCount
-        );
+        require_eq!(accounts.len(), EXPECTED_COUNT, AmmError::WrongAccountsCount);
 
         // should we also confirm the rest of accountmetdata? {is_signer, is_writtable}
         let expected_accounts: [Pubkey; EXPECTED_COUNT] = [
@@ -235,11 +231,7 @@ impl<'info> Withdraw<'info> {
         ];
 
         for (index, key) in expected_accounts.iter().enumerate() {
-            require_keys_eq!(
-                accounts[index].pubkey,
-                *key,
-                AmmError::InvalidKey
-            );
+            require_keys_eq!(accounts[index].pubkey, *key, AmmError::InvalidKey);
         }
 
         Ok(())

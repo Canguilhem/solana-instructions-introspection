@@ -46,12 +46,7 @@ pub mod amm {
         ctx.accounts.withdraw(lp_amount, side, min_x, min_y)
     }
 
-    pub fn swap(
-        ctx: Context<Swap>,
-        amount: u64,
-        side: OperationSide,
-        min_out: u64,
-    ) -> Result<()> {
+    pub fn swap(ctx: Context<Swap>, amount: u64, side: OperationSide, min_out: u64) -> Result<()> {
         ctx.accounts.swap(amount, side, min_out)
     }
 
@@ -65,10 +60,7 @@ pub mod amm {
         ctx.accounts.update(fee, authority, locked)
     }
 
-    pub fn burn_lp_tokens(
-        ctx: Context<BurnLp>,
-        amount: u64,
-    ) -> Result<()> {
+    pub fn burn_lp_tokens(ctx: Context<BurnLp>, amount: u64) -> Result<()> {
         ctx.accounts.burn_lp_tokens(amount)
     }
 }

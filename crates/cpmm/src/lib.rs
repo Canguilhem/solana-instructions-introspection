@@ -81,10 +81,7 @@ impl PoolState {
     /// Fails if `amount_out < min_out`.
     pub fn swap(&self, amount_in: u64, side: Side, min_out: u64) -> CpmmResult<SwapQuote> {
         cpmm_require!(amount_in > 0, CpmmError::InvalidAmount);
-        cpmm_require!(
-            matches!(side, Side::X | Side::Y),
-            CpmmError::InvalidAmount
-        );
+        cpmm_require!(matches!(side, Side::X | Side::Y), CpmmError::InvalidAmount);
         cpmm_require!(
             self.reserve_x > 0 && self.reserve_y > 0,
             CpmmError::ZeroBalance
@@ -208,7 +205,12 @@ impl PoolState {
     /// deposit_x = L * x / L_supply
     /// deposit_y = L * y / L_supply
     /// ```
-    fn deposit_balanced(&self, token_x: u64, token_y: u64, min_lp: u64) -> CpmmResult<DepositQuote> {
+    fn deposit_balanced(
+        &self,
+        token_x: u64,
+        token_y: u64,
+        min_lp: u64,
+    ) -> CpmmResult<DepositQuote> {
         cpmm_require!(token_x > 0 && token_y > 0, CpmmError::InvalidAmount);
 
         if self.lp_supply == 0 {
@@ -282,7 +284,9 @@ impl PoolState {
             self.reserve_x
                 .checked_add(swap_amount)
                 .ok_or(CpmmError::Overflow)?,
-            self.reserve_y.checked_sub(y_out).ok_or(CpmmError::Underflow)?,
+            self.reserve_y
+                .checked_sub(y_out)
+                .ok_or(CpmmError::Underflow)?,
             self.lp_supply,
             self.fee_bps,
         );
@@ -303,7 +307,9 @@ impl PoolState {
         let x_out = self.swap_out(swap_amount, Side::Y)?;
 
         let pool_after_swap = PoolState::new(
-            self.reserve_x.checked_sub(x_out).ok_or(CpmmError::Underflow)?,
+            self.reserve_x
+                .checked_sub(x_out)
+                .ok_or(CpmmError::Underflow)?,
             self.reserve_y
                 .checked_add(swap_amount)
                 .ok_or(CpmmError::Overflow)?,
@@ -372,9 +378,7 @@ impl PoolState {
         let y1 = y.checked_sub(wy).ok_or(CpmmError::Underflow)?;
 
         let x_swap = swap_out_y_for_x(x1, y1, wy as u64, self.fee_bps)?;
-        let total_x = wx0
-            .checked_add(x_swap as u128)
-            .ok_or(CpmmError::Overflow)? as u64;
+        let total_x = wx0.checked_add(x_swap as u128).ok_or(CpmmError::Overflow)? as u64;
 
         cpmm_require!(total_x > 0, CpmmError::InvalidAmount);
 
@@ -414,9 +418,7 @@ impl PoolState {
         let y1 = y.checked_sub(wy0).ok_or(CpmmError::Underflow)?;
 
         let y_swap = swap_out_x_for_y(x1, y1, wx as u64, self.fee_bps)?;
-        let total_y = wy0
-            .checked_add(y_swap as u128)
-            .ok_or(CpmmError::Overflow)? as u64;
+        let total_y = wy0.checked_add(y_swap as u128).ok_or(CpmmError::Overflow)? as u64;
 
         cpmm_require!(total_y > 0, CpmmError::InvalidAmount);
 
@@ -435,7 +437,9 @@ impl PoolState {
 
 /// Pay Y on reserves `(x, y)`, receive X: `Δx = (γ * x * Δy) / (10_000 * y + γ * Δy)`.
 fn swap_out_y_for_x(x: u128, y: u128, amount_y: u64, fee_bps: u16) -> CpmmResult<u64> {
-    let gamma = BPS.checked_sub(fee_bps as u128).ok_or(CpmmError::InvalidFee)?;
+    let gamma = BPS
+        .checked_sub(fee_bps as u128)
+        .ok_or(CpmmError::InvalidFee)?;
     let dy = amount_y as u128;
 
     let out = gamma
@@ -454,7 +458,9 @@ fn swap_out_y_for_x(x: u128, y: u128, amount_y: u64, fee_bps: u16) -> CpmmResult
 
 /// Pay X on reserves `(x, y)`, receive Y: `Δy = (γ * y * Δx) / (10_000 * x + γ * Δx)`.
 fn swap_out_x_for_y(x: u128, y: u128, amount_x: u64, fee_bps: u16) -> CpmmResult<u64> {
-    let gamma = BPS.checked_sub(fee_bps as u128).ok_or(CpmmError::InvalidFee)?;
+    let gamma = BPS
+        .checked_sub(fee_bps as u128)
+        .ok_or(CpmmError::InvalidFee)?;
     let dx = amount_x as u128;
 
     let out = gamma
