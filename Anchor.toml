@@ -6,6 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
+amm = "5wekX7jGVaqsZWsJGoYJzkC3JGuWCUp1b2Wfg9G3m5SW"
 dice_game = "3hvpNKz6QeYsALNMwF18ViCT9K31wsvNqS5STbfDZMso"
 
 [provider]
@@ -14,3 +15,5 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+
+[hooks]

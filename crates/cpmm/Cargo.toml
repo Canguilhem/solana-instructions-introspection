@@ -1,0 +1,13 @@
+[package]
+name = "cpmm"
+version = "0.1.0"
+edition = "2021"
+description = "Anchor-free Uniswap V2-style constant product market maker math"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["amm", "defi", "solana", "uniswap", "cpmm"]
+categories = ["finance", "mathematics", "no-std"]
+
+[dependencies]
+
+[dev-dependencies]
