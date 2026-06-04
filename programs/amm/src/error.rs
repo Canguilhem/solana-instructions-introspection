@@ -36,6 +36,8 @@ pub enum AmmError {
     InvalidDataLength,
     #[msg("Missing Prior instructions")]
     MissingPriorInstruction,
+    #[msg("Unexpected discriminator")]
+    UnexpectedDiscriminator
 }
 
 impl From<CpmmError> for AmmError {

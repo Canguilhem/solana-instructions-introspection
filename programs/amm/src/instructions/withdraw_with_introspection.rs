@@ -6,7 +6,7 @@ use anchor_spl::{
 use solana_instructions_sysvar::get_instruction_relative;
 
 use crate::{
-    error::AmmError, Config, OperationSide, PoolState, WithdrawQuote, CONFIG_SEED, LP_SEED,
+    CONFIG_SEED, Config, LP_SEED, OperationSide, PoolState, WithdrawQuote, error::AmmError, instruction::BurnLpTokens
 };
 
 #[derive(Accounts)]
@@ -191,15 +191,17 @@ impl<'info> WithdrawWithIntrospection<'info> {
         // // confirm ix originate from our program
         require_eq!(ix.program_id, crate::ID, AmmError::InvalidProgramId);
 
+        // confirm instruction::discriminator
+        require!(
+            &ix.data[..8] == BurnLpTokens::DISCRIMINATOR,
+            AmmError::UnexpectedDiscriminator
+        );
+
         // confirm ix refs accounts
         self.confrim_burn_accounts(ix.accounts)?;
 
-        // confirm data is 16 bytes long including discriminator (8)
-        // u64 is 8 bytes
+        // confirm data is 16 bytes (discriminator: 8 + u64: 8)
         require_eq!(ix.data.len(), 16, AmmError::InvalidDataLength);
-
-        // What would be the discriminator here
-        // require_eq!(ix.data[0], 0, AmmError::InvalidDiscriminator);
 
         // read burn_amount used
         let burn_amount = u64::from_le_bytes(

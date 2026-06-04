@@ -1098,7 +1098,7 @@ fn compare_cu_usage() {
 
     let direct_meta =
         send(&mut pool.svm, &[withdraw], &pool.payer, &[&pool.payer]).expect("Direct withdraw");
-
+    
     println!("direct CU: {}", direct_meta.compute_units_consumed);
 
     let intro_withdraw = create_withdraw_w_introspection_ix(
