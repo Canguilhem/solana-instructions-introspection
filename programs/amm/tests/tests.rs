@@ -12,8 +12,8 @@ mod utils;
 use utils::create_initialize_ix;
 
 use crate::utils::{
-    create_burn_ix, create_deposit_ix, create_swap_ix, create_withdraw_ix, get_user_atas,
-    token_balance, update_config_ix,
+    create_burn_ix, create_deposit_ix, create_swap_ix, create_withdraw_ix,
+    create_withdraw_w_introspection_ix, get_user_atas, token_balance, update_config_ix,
 };
 
 const SEED: u64 = 123;
@@ -222,68 +222,6 @@ fn test_deposit() {
 }
 
 #[test]
-fn test_withdraw() {
-    let mut pool = setup_initialized_pool();
-    let withdraw_amount = 25_000_000;
-
-    let withdraw = create_withdraw_ix(
-        &mut pool.svm,
-        &pool.payer,
-        pool.mint_x,
-        pool.mint_y,
-        pool.config,
-        pool.mint_lp,
-        pool.vault_x,
-        pool.vault_y,
-        pool.user_x,
-        pool.user_y,
-        pool.user_lp,
-        withdraw_amount,
-        amm::OperationSide::Balanced,
-        withdraw_amount,
-        withdraw_amount,
-    );
-
-    assert_tx_err(
-        send(
-            &mut pool.svm,
-            &[withdraw.clone()],
-            &pool.payer,
-            &[&pool.payer],
-        ),
-        "MissingPriorInstruction", // Anchor Error Code name in logs
-    );
-
-    let burn_ix = create_burn_ix(
-        &mut pool.svm,
-        &pool.payer,
-        pool.mint_x,
-        pool.mint_y,
-        pool.config,
-        pool.mint_lp,
-        pool.user_lp,
-        withdraw_amount,
-    );
-
-    send(
-        &mut pool.svm,
-        &[burn_ix, withdraw],
-        &pool.payer,
-        &[&pool.payer],
-    )
-    .expect("Burn + withdraw -> OK");
-
-    assert_eq!(
-        token_balance(&pool.svm, &pool.user_lp),
-        INITIAL_DEPOSIT - withdraw_amount,
-    );
-    assert_eq!(
-        token_balance(&pool.svm, &pool.vault_x),
-        token_balance(&pool.svm, &pool.vault_y),
-    );
-}
-
-#[test]
 fn test_swap() {
     let mut pool = setup_initialized_pool();
     let user_x_before = token_balance(&pool.svm, &pool.user_x);
@@ -413,7 +351,7 @@ fn test_locked_pool_rejects_withdraw() {
     let mut pool = setup_initialized_pool();
     lock_pool(&mut pool);
 
-    let withdraw = create_withdraw_ix(
+    let withdraw = create_withdraw_w_introspection_ix(
         &mut pool.svm,
         &pool.payer,
         pool.mint_x,
@@ -769,7 +707,42 @@ fn test_single_sided_deposit_y_preserves_user_funds() {
 }
 
 #[test]
-fn test_single_sided_withdraw_x_preserves_user_funds() {
+fn test_direct_withdraw() {
+    let mut pool = setup_initialized_pool();
+    let withdraw_amount = 25_000_000;
+
+    let withdraw = create_withdraw_ix(
+        &mut pool.svm,
+        &pool.payer,
+        pool.mint_x,
+        pool.mint_y,
+        pool.config,
+        pool.mint_lp,
+        pool.vault_x,
+        pool.vault_y,
+        pool.user_x,
+        pool.user_y,
+        pool.user_lp,
+        withdraw_amount,
+        amm::OperationSide::Balanced,
+        withdraw_amount,
+        withdraw_amount,
+    );
+
+    send(&mut pool.svm, &[withdraw], &pool.payer, &[&pool.payer]).expect("Direct withdraw");
+
+    assert_eq!(
+        token_balance(&pool.svm, &pool.user_lp),
+        INITIAL_DEPOSIT - withdraw_amount,
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.vault_x),
+        token_balance(&pool.svm, &pool.vault_y),
+    );
+}
+
+#[test]
+fn test_single_sided_direct_withdraw_x_preserves_user_funds() {
     let mut pool = setup_initialized_pool();
     let lp_amount = 10_000_000;
 
@@ -784,6 +757,186 @@ fn test_single_sided_withdraw_x_preserves_user_funds() {
         .expect("cpmm quote");
 
     let withdraw = create_withdraw_ix(
+        &mut pool.svm,
+        &pool.payer,
+        pool.mint_x,
+        pool.mint_y,
+        pool.config,
+        pool.mint_lp,
+        pool.vault_x,
+        pool.vault_y,
+        pool.user_x,
+        pool.user_y,
+        pool.user_lp,
+        lp_amount,
+        amm::OperationSide::X,
+        0,
+        0,
+    );
+
+    send(&mut pool.svm, &[withdraw], &pool.payer, &[&pool.payer]).expect("Direct withdraw");
+
+    assert_eq!(
+        token_balance(&pool.svm, &pool.user_x),
+        user_x_before + quote.withdraw_x,
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.user_y),
+        user_y_before,
+        "single-sided X withdraw must not strand Y in the user wallet",
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.vault_x),
+        vault_x_before - quote.withdraw_x,
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.vault_y),
+        vault_y_before,
+        "pro-rata Y out and swap Y in cancel on single-sided X withdraw",
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.user_lp),
+        user_lp_before - lp_amount,
+    );
+}
+
+#[test]
+fn test_single_sided_direct_withdraw_y_preserves_user_funds() {
+    let mut pool = setup_initialized_pool();
+    let lp_amount = 10_000_000;
+
+    let user_x_before = token_balance(&pool.svm, &pool.user_x);
+    let user_y_before = token_balance(&pool.svm, &pool.user_y);
+    let vault_x_before = token_balance(&pool.svm, &pool.vault_x);
+    let vault_y_before = token_balance(&pool.svm, &pool.vault_y);
+    let user_lp_before = token_balance(&pool.svm, &pool.user_lp);
+
+    let quote = cpmm_pool(&pool)
+        .withdraw(lp_amount, amm::Side::Y, 0, 0)
+        .expect("cpmm quote");
+
+    let withdraw = create_withdraw_ix(
+        &mut pool.svm,
+        &pool.payer,
+        pool.mint_x,
+        pool.mint_y,
+        pool.config,
+        pool.mint_lp,
+        pool.vault_x,
+        pool.vault_y,
+        pool.user_x,
+        pool.user_y,
+        pool.user_lp,
+        lp_amount,
+        amm::OperationSide::Y,
+        0,
+        0,
+    );
+
+    send(&mut pool.svm, &[withdraw], &pool.payer, &[&pool.payer]).expect("Direct withdraw");
+
+    assert_eq!(
+        token_balance(&pool.svm, &pool.user_x),
+        user_x_before,
+        "single-sided Y withdraw must not strand X in the user wallet",
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.user_y),
+        user_y_before + quote.withdraw_y,
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.vault_x),
+        vault_x_before,
+        "pro-rata X out and swap X in cancel on single-sided Y withdraw",
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.vault_y),
+        vault_y_before - quote.withdraw_y,
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.user_lp),
+        user_lp_before - lp_amount,
+    );
+}
+
+#[test]
+fn test_introspection_withdraw() {
+    let mut pool = setup_initialized_pool();
+    let withdraw_amount = 25_000_000;
+
+    let withdraw = create_withdraw_w_introspection_ix(
+        &mut pool.svm,
+        &pool.payer,
+        pool.mint_x,
+        pool.mint_y,
+        pool.config,
+        pool.mint_lp,
+        pool.vault_x,
+        pool.vault_y,
+        pool.user_x,
+        pool.user_y,
+        pool.user_lp,
+        withdraw_amount,
+        amm::OperationSide::Balanced,
+        withdraw_amount,
+        withdraw_amount,
+    );
+
+    assert_tx_err(
+        send(
+            &mut pool.svm,
+            &[withdraw.clone()],
+            &pool.payer,
+            &[&pool.payer],
+        ),
+        "MissingPriorInstruction", // Anchor Error Code name in logs
+    );
+
+    let burn_ix = create_burn_ix(
+        &mut pool.svm,
+        &pool.payer,
+        pool.mint_x,
+        pool.mint_y,
+        pool.config,
+        pool.mint_lp,
+        pool.user_lp,
+        withdraw_amount,
+    );
+
+    send(
+        &mut pool.svm,
+        &[burn_ix, withdraw],
+        &pool.payer,
+        &[&pool.payer],
+    )
+    .expect("Burn + withdraw -> OK");
+
+    assert_eq!(
+        token_balance(&pool.svm, &pool.user_lp),
+        INITIAL_DEPOSIT - withdraw_amount,
+    );
+    assert_eq!(
+        token_balance(&pool.svm, &pool.vault_x),
+        token_balance(&pool.svm, &pool.vault_y),
+    );
+}
+
+#[test]
+fn test_single_sided_introspection_withdraw_x_preserves_user_funds() {
+    let mut pool = setup_initialized_pool();
+    let lp_amount = 10_000_000;
+
+    let user_x_before = token_balance(&pool.svm, &pool.user_x);
+    let user_y_before = token_balance(&pool.svm, &pool.user_y);
+    let vault_x_before = token_balance(&pool.svm, &pool.vault_x);
+    let vault_y_before = token_balance(&pool.svm, &pool.vault_y);
+    let user_lp_before = token_balance(&pool.svm, &pool.user_lp);
+
+    let quote = cpmm_pool(&pool)
+        .withdraw(lp_amount, amm::Side::X, 0, 0)
+        .expect("cpmm quote");
+
+    let withdraw = create_withdraw_w_introspection_ix(
         &mut pool.svm,
         &pool.payer,
         pool.mint_x,
@@ -845,7 +998,7 @@ fn test_single_sided_withdraw_x_preserves_user_funds() {
 }
 
 #[test]
-fn test_single_sided_withdraw_y_preserves_user_funds() {
+fn test_single_sided_introspection_withdraw_y_preserves_user_funds() {
     let mut pool = setup_initialized_pool();
     let lp_amount = 10_000_000;
 
@@ -859,7 +1012,7 @@ fn test_single_sided_withdraw_y_preserves_user_funds() {
         .withdraw(lp_amount, amm::Side::Y, 0, 0)
         .expect("cpmm quote");
 
-    let withdraw = create_withdraw_ix(
+    let withdraw = create_withdraw_w_introspection_ix(
         &mut pool.svm,
         &pool.payer,
         pool.mint_x,
@@ -918,4 +1071,72 @@ fn test_single_sided_withdraw_y_preserves_user_funds() {
         token_balance(&pool.svm, &pool.user_lp),
         user_lp_before - lp_amount,
     );
+}
+
+#[test]
+fn compare_cu_usage() {
+    let mut pool = setup_initialized_pool();
+    let withdraw_amount = 25_000_000;
+
+    let withdraw: Instruction = create_withdraw_ix(
+        &mut pool.svm,
+        &pool.payer,
+        pool.mint_x,
+        pool.mint_y,
+        pool.config,
+        pool.mint_lp,
+        pool.vault_x,
+        pool.vault_y,
+        pool.user_x,
+        pool.user_y,
+        pool.user_lp,
+        withdraw_amount,
+        amm::OperationSide::Balanced,
+        withdraw_amount,
+        withdraw_amount,
+    );
+
+    let direct_meta =
+        send(&mut pool.svm, &[withdraw], &pool.payer, &[&pool.payer]).expect("Direct withdraw");
+
+    println!("direct CU: {}", direct_meta.compute_units_consumed);
+
+    let intro_withdraw = create_withdraw_w_introspection_ix(
+        &mut pool.svm,
+        &pool.payer,
+        pool.mint_x,
+        pool.mint_y,
+        pool.config,
+        pool.mint_lp,
+        pool.vault_x,
+        pool.vault_y,
+        pool.user_x,
+        pool.user_y,
+        pool.user_lp,
+        withdraw_amount,
+        amm::OperationSide::Balanced,
+        withdraw_amount,
+        withdraw_amount,
+    );
+
+    let burn_ix = create_burn_ix(
+        &mut pool.svm,
+        &pool.payer,
+        pool.mint_x,
+        pool.mint_y,
+        pool.config,
+        pool.mint_lp,
+        pool.user_lp,
+        withdraw_amount,
+    );
+
+    let intro_meta = send(
+        &mut pool.svm,
+        &[burn_ix, intro_withdraw],
+        &pool.payer,
+        &[&pool.payer],
+    )
+    .expect("Burn + withdraw -> OK");
+
+    println!("introspection CU: {}", intro_meta.compute_units_consumed);
 }

@@ -5,6 +5,9 @@ pub use initialize::*;
 pub mod deposit;
 pub use deposit::*;
 
+pub mod withdraw_with_introspection;
+pub use withdraw_with_introspection::*;
+
 pub mod withdraw;
 pub use withdraw::*;
 

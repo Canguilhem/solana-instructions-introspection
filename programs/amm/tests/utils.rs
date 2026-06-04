@@ -125,6 +125,54 @@ pub fn create_deposit_ix(
     }
 }
 
+pub fn create_withdraw_w_introspection_ix(
+    _svm: &mut LiteSVM,
+    payer: &Keypair,
+    mint_x: Pubkey,
+    mint_y: Pubkey,
+    config: Pubkey,
+    mint_lp: Pubkey,
+    vault_x: Pubkey,
+    vault_y: Pubkey,
+    user_x: Pubkey,
+    user_y: Pubkey,
+    user_lp: Pubkey,
+    lp_amount: u64,
+    side: amm::OperationSide,
+    min_x: u64,
+    min_y: u64,
+) -> Instruction {
+    let maker = payer.pubkey();
+
+    Instruction {
+        program_id: amm::id(),
+        accounts: amm::accounts::WithdrawWithIntrospection {
+            user: maker,
+            mint_x,
+            mint_y,
+            config,
+            mint_lp,
+            vault_x,
+            vault_y,
+            user_x,
+            user_y,
+            user_lp,
+            instruction_sysvar: solana_instructions_sysvar::ID,
+            token_program: TOKEN_PROGRAM_ID,
+            system_program: SYSTEM_PROGRAM_ID,
+            associated_token_program: ASSOCIATED_PROGRAM_ID,
+        }
+        .to_account_metas(None),
+        data: amm::instruction::WithdrawWIntrospection {
+            lp_amount,
+            side,
+            min_x,
+            min_y,
+        }
+        .data(),
+    }
+}
+
 pub fn create_withdraw_ix(
     _svm: &mut LiteSVM,
     payer: &Keypair,
@@ -157,7 +205,6 @@ pub fn create_withdraw_ix(
             user_x,
             user_y,
             user_lp,
-            instruction_sysvar: solana_instructions_sysvar::ID,
             token_program: TOKEN_PROGRAM_ID,
             system_program: SYSTEM_PROGRAM_ID,
             associated_token_program: ASSOCIATED_PROGRAM_ID,

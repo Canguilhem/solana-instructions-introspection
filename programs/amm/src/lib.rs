@@ -36,6 +36,17 @@ pub mod amm {
         ctx.accounts.deposit(token_x, token_y, side, min_lp)
     }
 
+    pub fn withdraw_w_introspection(
+        ctx: Context<WithdrawWithIntrospection>,
+        lp_amount: u64,
+        side: OperationSide,
+        min_x: u64,
+        min_y: u64,
+    ) -> Result<()> {
+        ctx.accounts
+            .withdraw_w_introspection(lp_amount, side, min_x, min_y)
+    }
+
     pub fn withdraw(
         ctx: Context<Withdraw>,
         lp_amount: u64,

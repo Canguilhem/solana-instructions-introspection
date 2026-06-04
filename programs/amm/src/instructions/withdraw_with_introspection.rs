@@ -1,15 +1,16 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{burn, transfer, Burn, Mint, Token, TokenAccount, Transfer},
+    token::{transfer, Mint, Token, TokenAccount, Transfer},
 };
+use solana_instructions_sysvar::get_instruction_relative;
 
 use crate::{
     error::AmmError, Config, OperationSide, PoolState, WithdrawQuote, CONFIG_SEED, LP_SEED,
 };
 
 #[derive(Accounts)]
-pub struct Withdraw<'info> {
+pub struct WithdrawWithIntrospection<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
@@ -60,13 +61,18 @@ pub struct Withdraw<'info> {
     )]
     pub user_lp: Box<Account<'info, TokenAccount>>,
 
+    /// CHECK: This should be safe
+    #[account(
+        address= solana_sdk_ids::sysvar::instructions::ID
+    )]
+    pub instruction_sysvar: UncheckedAccount<'info>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
-impl<'info> Withdraw<'info> {
-    pub fn withdraw(
+impl<'info> WithdrawWithIntrospection<'info> {
+    pub fn withdraw_w_introspection(
         &mut self,
         lp_amount: u64,
         side: OperationSide,
@@ -75,10 +81,17 @@ impl<'info> Withdraw<'info> {
     ) -> Result<()> {
         require!(!self.config.locked, AmmError::PoolLocked);
 
+        self.confirm_burn(lp_amount)?;
+
         let pool = PoolState::new(
             self.vault_x.amount,
             self.vault_y.amount,
-            self.mint_lp.supply,
+            // now that burn and lp are two different instructions
+            //  we need to use lp_supply_before_burn
+            self.mint_lp
+                .supply
+                .checked_add(lp_amount)
+                .ok_or(AmmError::Overflow)?,
             self.config.fee,
         );
 
@@ -87,7 +100,8 @@ impl<'info> Withdraw<'info> {
             .map_err(AmmError::from)?;
 
         self.execute_withdraw_transfers(side, &quote)?;
-        self.burn_lp_tokens(lp_amount)
+        // self.burn_lp_tokens(lp_amount)
+        Ok(())
     }
 
     fn execute_withdraw_transfers(&self, side: OperationSide, quote: &WithdrawQuote) -> Result<()> {
@@ -171,17 +185,55 @@ impl<'info> Withdraw<'info> {
         transfer(ctx, amount)
     }
 
-    pub fn burn_lp_tokens(&self, amount: u64) -> Result<()> {
-        let program = self.token_program.key();
+    pub fn confirm_burn(&self, amount: u64) -> Result<()> {
+        let ix = get_instruction_relative(-1, &self.instruction_sysvar.to_account_info())
+            .map_err(|_| error!(AmmError::MissingPriorInstruction))?;
+        // // confirm ix originate from our program
+        require_eq!(ix.program_id, crate::ID, AmmError::InvalidProgramId);
 
-        let accounts = Burn {
-            mint: self.mint_lp.to_account_info(),
-            authority: self.user.to_account_info(),
-            from: self.user_lp.to_account_info(),
-        };
+        // confirm ix refs accounts
+        self.confrim_burn_accounts(ix.accounts)?;
 
-        let ctx = CpiContext::new(program, accounts);
+        // confirm data is 16 bytes long including discriminator (8)
+        // u64 is 8 bytes
+        require_eq!(ix.data.len(), 16, AmmError::InvalidDataLength);
 
-        burn(ctx, amount)
+        // What would be the discriminator here
+        // require_eq!(ix.data[0], 0, AmmError::InvalidDiscriminator);
+
+        // read burn_amount used
+        let burn_amount = u64::from_le_bytes(
+            ix.data[8..16]
+                .try_into()
+                .map_err(|_| AmmError::InvalidDataLength)?,
+        );
+        require_eq!(burn_amount, amount, AmmError::InvalidAmount);
+
+        Ok(())
+    }
+
+    pub fn confrim_burn_accounts(&self, accounts: Vec<AccountMeta>) -> Result<()> {
+        const EXPECTED_COUNT: usize = 9;
+
+        require_eq!(accounts.len(), EXPECTED_COUNT, AmmError::WrongAccountsCount);
+
+        // should we also confirm the rest of accountmetdata? {is_signer, is_writtable}
+        let expected_accounts: [Pubkey; EXPECTED_COUNT] = [
+            self.user.key(),
+            self.mint_x.key(),
+            self.mint_y.key(),
+            self.config.key(),
+            self.mint_lp.key(),
+            self.user_lp.key(),
+            self.token_program.key(),
+            self.system_program.key(),
+            self.associated_token_program.key(),
+        ];
+
+        for (index, key) in expected_accounts.iter().enumerate() {
+            require_keys_eq!(accounts[index].pubkey, *key, AmmError::InvalidKey);
+        }
+
+        Ok(())
     }
 }
